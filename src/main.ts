@@ -52,7 +52,7 @@ export default class NewFilePlugin extends Plugin {
             const newFile = await this.createFile(activeFile, newFileName);
             const leaf = this.app.workspace.getLeaf('tab');
             await leaf.openFile(newFile);
-            await leaf.setEphemeralState({ mode: 'source' });
+            await leaf.setViewState({ type: 'source' });
             new Notice(`Created new file: ${newFileName}`);
         } catch (error) {
             console.error('Error creating new file:', error);
