@@ -28,58 +28,38 @@ __export(main_exports, {
 });
 module.exports = __toCommonJS(main_exports);
 var import_obsidian = require("obsidian");
-var DEFAULT_SETTINGS = {
-  defaultFolder: ""
-};
 var NewFilePlugin = class extends import_obsidian.Plugin {
   async onload() {
-    await this.loadSettings();
-    this.addSettingTab(new NewFileSettingTab(this.app, this));
-    this.addCommand({
-      id: "create-new-file-with-front-matter",
-      name: "Create new file with copied front matter",
-      callback: () => this.createNewFileWithFrontMatter()
-    });
     this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
-      menu.addItem((item) => {
-        item.setTitle("Create new file with copied front matter").setIcon("document").onClick(() => {
-          if (file instanceof import_obsidian.TFile) {
-            this.createNewFileWithFrontMatter(file);
-          }
-        });
-      });
+      this.addCreateFileMenuItem(menu, file);
     }));
-    this.registerDomEvent(document, "click", (event) => {
-      const target = event.target;
-      if (target.classList.contains("internal-link")) {
-        const href = target.getAttribute("href");
-        if (href) {
-          const file = this.app.metadataCache.getFirstLinkpathDest(href, "");
-          if (!file) {
-            event.preventDefault();
-            this.createNewFileWithFrontMatter(void 0, href);
-          }
+    this.registerEvent(this.app.workspace.on("editor-menu", (menu, editor, view) => {
+      const selection = editor.getSelection();
+      const linkMatch = selection.match(/\[\[([^\]]+)\]\]/);
+      if (linkMatch) {
+        const linkText = linkMatch[1].split("|")[0];
+        const file = this.app.metadataCache.getFirstLinkpathDest(linkText, "");
+        if (!file && view.file) {
+          this.addCreateFileMenuItem(menu, view.file, linkText);
         }
       }
+    }));
+  }
+  addCreateFileMenuItem(menu, file, newFileName) {
+    menu.addItem((item) => {
+      item.setTitle("Create file with front matter").setIcon("document").onClick(() => {
+        this.createNewFileWithFrontMatter(file, newFileName);
+      });
     });
-  }
-  async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-  }
-  async saveSettings() {
-    await this.saveData(this.settings);
   }
   async createNewFileWithFrontMatter(file, newFileName) {
     try {
       const activeFile = await this.getActiveFile(file);
-      if (!activeFile)
+      if (!activeFile || !newFileName)
         return;
-      const fileName = await this.determineFileName(newFileName);
-      if (!fileName)
-        return;
-      const newFile = await this.createFile(activeFile, fileName);
+      const newFile = await this.createFile(activeFile, newFileName);
       await this.openNewFile(newFile);
-      new import_obsidian.Notice(`Created new file: ${fileName}`);
+      new import_obsidian.Notice(`Created new file: ${newFileName}`);
     } catch (error) {
       console.error("Error creating new file:", error);
       new import_obsidian.Notice("Error creating new file. Check console for details.");
@@ -93,16 +73,10 @@ var NewFilePlugin = class extends import_obsidian.Plugin {
     }
     return activeFile;
   }
-  async determineFileName(newFileName) {
-    if (!newFileName) {
-      return await this.getNewFileName();
-    }
-    return newFileName;
-  }
   async createFile(sourceFile, fileName) {
     var _a;
     const frontMatter = await this.getFrontMatter(sourceFile);
-    const folderPath = this.settings.defaultFolder || ((_a = sourceFile.parent) == null ? void 0 : _a.path) || "";
+    const folderPath = ((_a = sourceFile.parent) == null ? void 0 : _a.path) || "";
     const newFilePath = `${folderPath}/${fileName}.md`;
     return await this.app.vault.create(newFilePath, frontMatter);
   }
@@ -112,71 +86,20 @@ var NewFilePlugin = class extends import_obsidian.Plugin {
   }
   async getFrontMatter(file) {
     try {
+      const content = await this.app.vault.read(file);
       const cache = this.app.metadataCache.getFileCache(file);
-      if (cache == null ? void 0 : cache.frontmatter) {
-        const { position } = cache.frontmatter;
-        const content = await this.app.vault.read(file);
-        return content.slice(0, position.end.offset);
+      if (!(cache == null ? void 0 : cache.frontmatter)) {
+        return "---\n---\n";
+      }
+      const frontmatterRegex = /^---\n([\s\S]*?)\n---/;
+      const match = content.match(frontmatterRegex);
+      if (match) {
+        return match[0] + "\n";
       }
       return "---\n---\n";
     } catch (error) {
       console.error("Error getting front matter:", error);
       return "---\n---\n";
     }
-  }
-  async getNewFileName() {
-    return new Promise((resolve) => {
-      const modal = new NewFileModal(this.app, (result) => {
-        resolve(result);
-      });
-      modal.open();
-    });
-  }
-};
-var NewFileModal = class extends import_obsidian.Modal {
-  constructor(app, onSubmit) {
-    super(app);
-    this.onSubmit = onSubmit;
-  }
-  onOpen() {
-    const { contentEl } = this;
-    contentEl.createEl("h2", { text: "Enter new file name" });
-    const inputEl = contentEl.createEl("input", { type: "text" });
-    inputEl.focus();
-    const submitButton = contentEl.createEl("button", { text: "Create" });
-    submitButton.onclick = () => {
-      this.result = inputEl.value;
-      this.close();
-    };
-    inputEl.addEventListener("keypress", (event) => {
-      if (event.key === "Enter") {
-        this.result = inputEl.value;
-        this.close();
-      }
-    });
-  }
-  onClose() {
-    const { contentEl } = this;
-    contentEl.empty();
-    if (this.result) {
-      this.onSubmit(this.result);
-    } else {
-      this.onSubmit(void 0);
-    }
-  }
-};
-var NewFileSettingTab = class extends import_obsidian.PluginSettingTab {
-  constructor(app, plugin) {
-    super(app, plugin);
-    this.plugin = plugin;
-  }
-  display() {
-    const { containerEl } = this;
-    containerEl.empty();
-    containerEl.createEl("h2", { text: "New File Plugin Settings" });
-    new import_obsidian.Setting(containerEl).setName("Default folder for new files").setDesc("Set the default folder where new files will be created").addText((text) => text.setPlaceholder("Enter folder path").setValue(this.plugin.settings.defaultFolder).onChange(async (value) => {
-      this.plugin.settings.defaultFolder = value;
-      await this.plugin.saveSettings();
-    }));
   }
 };
