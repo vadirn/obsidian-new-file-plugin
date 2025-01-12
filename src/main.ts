@@ -32,13 +32,7 @@ export default class NewFilePlugin extends Plugin {
     }
 
     private addCreateFileMenuItem(menu: Menu, file: TFile, newFileName?: string) {
-        // Find the "Create this file" menu item
-        const menuItems = (menu as any).items;
-        const createFileIndex = menuItems.findIndex((item: any) => 
-            item.titleEl?.textContent === 'Create this file'
-        );
-
-        const menuItem = menu.addItem((item) => {
+        menu.addItem((item) => {
             item
                 .setTitle('Create file with current frontmatter')
                 .setIcon('document')
@@ -46,12 +40,6 @@ export default class NewFilePlugin extends Plugin {
                     this.createNewFileWithFrontMatter(file, newFileName);
                 });
         });
-
-        // Move the item after "Create this file"
-        if (createFileIndex >= 0) {
-            menuItems.remove(menuItem);
-            menuItems.splice(createFileIndex + 1, 0, menuItem);
-        }
     }
 
     async createNewFileWithFrontMatter(file?: TFile, newFileName?: string) {
