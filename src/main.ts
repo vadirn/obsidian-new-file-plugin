@@ -1,23 +1,41 @@
 import { App, Plugin, TFile, Notice, Menu, MarkdownView, Editor } from 'obsidian';
 
 export default class NewFilePlugin extends Plugin {
+    private checkCursorInWikilink(editor: Editor): string | null {
+        const cursor = editor.getCursor();
+        const line = editor.getLine(cursor.line);
+        const linkMatch = line.match(/\[\[([^\]]+)\]\]/g);
+        
+        if (linkMatch) {
+            for (const match of linkMatch) {
+                const start = line.indexOf(match);
+                const end = start + match.length;
+                
+                if (cursor.ch >= start && cursor.ch <= end) {
+                    return match.slice(2, -2).split('|')[0];
+                }
+            }
+        }
+        return null;
+    }
+
     async onload() {
-        this.registerEvent(
-            this.app.workspace.on('file-menu', (menu: Menu, file: TFile) => {
-                this.addCreateFileMenuItem(menu, file);
-            })
-        );
+        this.addCommand({
+            id: 'create-file-with-frontmatter',
+            name: 'Create file with frontmatter from cursor position',
+            editorCallback: (editor: Editor, view: MarkdownView) => {
+                const linkText = this.checkCursorInWikilink(editor);
+                if (linkText && view.file && !this.app.metadataCache.getFirstLinkpathDest(linkText, '')) {
+                    this.createNewFileWithFrontMatter(view.file, linkText);
+                }
+            }
+        });
 
         this.registerEvent(
             this.app.workspace.on('editor-menu', (menu: Menu, editor: Editor, view: MarkdownView) => {
-                const selection = editor.getSelection();
-                const linkMatch = selection.match(/\[\[([^\]]+)\]\]/);
-                if (linkMatch) {
-                    const linkText = linkMatch[1].split('|')[0];
-                    const file = this.app.metadataCache.getFirstLinkpathDest(linkText, '');
-                    if (!file && view.file) {
-                        this.addCreateFileMenuItem(menu, view.file, linkText);
-                    }
+                const linkText = this.checkCursorInWikilink(editor);
+                if (linkText && view.file && !this.app.metadataCache.getFirstLinkpathDest(linkText, '')) {
+                    this.addCreateFileMenuItem(menu, view.file, linkText);
                 }
             })
         );
