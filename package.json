@@ -1,6 +1,6 @@
 {
   "name": "obsidian-new-file-plugin",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "description": "Create new files with copied front matter from the current file.",
   "main": "main.js",
   "scripts": {
